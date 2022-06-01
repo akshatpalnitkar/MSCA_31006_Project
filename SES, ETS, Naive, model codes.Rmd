@@ -1,0 +1,203 @@
+---
+title: "TESLA"
+author: "Jianling Hu"
+date: '2022-05-04'
+output: html_document
+---
+
+```{r}
+getwd() 
+setwd("/Users/jianlinghu/Documents/Analytics/Spring 2022/MSCA 31006 2 Time Series Analysis and Forecasting/group work")
+```
+
+## Read data and plot the trends of "closing price" over time
+
+```{r}
+data<-read.csv("stock_price_and_sentiment.csv",header = T,stringsAsFactors = F)
+data<-data[,c(1,5)]
+```
+
+## Note: x-axis "Time" is in days, the range should be [0, 2581]
+
+```{r}
+plot(data$Close,type="l",xlab="Time",ylab="Closing Price",main="TESLA TS")
+```
+
+## More plots with details (observed, seasonality, random)
+
+## Note: Seasonality defined as 252 days (approx. number of days that use 365 days deduct weekends for NASDAQ)
+
+
+```{r}
+close<-ts(data$Close,frequency = 252)
+de<-decompose(close)
+plot(de)
+```
+
+
+## TS plots of "closing price" over time; 
+
+## Zoom in the plots of the obvious fluctuations starts from row number 2038 (the date is 2020/1/8);
+
+```{r}
+library(xts)
+close <- xts(x = data$Close,as.Date(data$Date,format='%Y-%m-%d'),frequency = 252)
+plot(close)
+plot(close[2038:2581])
+```
+## Analysis of Stationarity
+
+```{r}
+library(tseries)
+adf.test(close)
+diff_close<-diff(close)
+adf.test(diff_close[-1])
+```
+
+```{r}
+kpss.test(close)
+diff_close<-diff(close)
+kpss.test(diff_close[-1])
+```
+
+
+
+
+```{r}
+acf(close,lag.max = 100)
+```
+
+
+```{r}
+acf(diff_close[-1])
+```
+
+
+
+## model: use the last 252 days as our "out of sample forecast", the rest of the data is our sample that used for forecasting. 
+
+## Simple Exponential Smoothing
+
+```{r}
+n<-length(close)
+library(forecast)
+
+model <- ses(close[(1:(n-252))],h=252)
+
+summary(model)
+```
+
+```{r}
+plot(model,ylim = c(0,1200))
+lines((n-252):n,data[(n-252):n,2])
+```
+
+
+## Measures of Simple Exponential Smoothing
+
+```{r}
+pred<-forecast(model,h=252)$mean 
+error<-pred-close[2330:n]
+mse<-mean(error^2)
+mae<-mean(abs(error))
+mape<-mean(abs(error/close[2330:n]))
+rmse<-sqrt(mean((error)^2))
+rmspe<-sqrt(mean((error/close[2330:n])^2))
+
+mse
+mae
+mape
+rmse
+rmspe
+```
+
+
+
+## Exponential Smoothing (ETS)
+
+```{r}
+foreca<-array(NA,dim = c(252,1))
+aic <- array(NA,dim = c(252,1))
+for (i in 1:252) {
+  model<-ets(close[1:(2328+i)])
+  aic[i,1]<-model$aic
+  foreca[i,1]<-forecast(model,h=1)$mean
+}
+error1<-foreca-close[2330:n]
+mse1<-mean(error1^2)
+mae1<-mean(abs(error1))
+mape1<-mean(abs(error1/close[2330:n]))
+rmse1<-sqrt(mean((error1)^2))
+rmspe1<-sqrt(mean((error1/close[2330:n])^2))
+
+mse1
+mae1
+mape1
+rmse1
+rmspe1
+```
+
+```{r}
+mean(aic)
+```
+
+```{r}
+foreca <- xts(x = foreca,as.Date(data[2330:n,1],format='%Y-%m-%d'),frequency = 252)
+
+plot(close,lwd=2)
+lines(foreca,type = "l",col = "red")
+
+plot(close[2330:n],lwd=2)
+lines(foreca,type = "l",col = "red")
+```
+
+
+##  Naive Model
+
+```{r}
+foreca1<-array(NA,dim = c(252,1))
+for (i in 1:252) {
+  foreca1[i,1]<-snaive(close[1:(2328+i)],h=1)$mean
+}
+error2<-foreca1-close[2330:n]
+mse2<-mean(error2^2)
+mae2<-mean(abs(error2))
+mape2<-mean(abs(error2/close[2330:n]))
+rmse2<-sqrt(mean((error2)^2))
+rmspe2<-sqrt(mean((error2/close[2330:n])^2))
+
+mse2
+mae2
+mape2
+rmse2
+rmspe2
+```
+
+```{r}
+foreca1 <- xts(x = foreca1,as.Date(data[2330:n,1],format='%Y-%m-%d'),frequency = 252)
+plot(close,lwd=2)
+lines(foreca1,type = "l",col = "red")
+
+plot(close[2330:n],lwd=2)
+lines(foreca1,type = "l",col = "red")
+```
+```{r}
+summary(foreca1)
+```
+
+
+## Outcome comparisons for 4 models above
+
+```{r}
+performance_values= matrix(c(mse, mse1, mse2,  mae, mae1, mae2,  mape, mape1, mape2,  rmse, rmse1, rmse2, rmspe, rmspe1, rmspe2), ncol=3, byrow=TRUE)
+ 
+colnames(performance_values) = c('Simple Exponential Smoothing','Exponential Smoothing','    Naive Model')
+rownames(performance_values) <- c('MSE  ','MAE  ','MAPE  ','RMSE  ','RMSPE')
+ 
+performance_table = as.table(performance_values)
+ 
+performance_table
+
+
+```
+
